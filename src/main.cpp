@@ -126,6 +126,30 @@ int main() {
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
 
+	  Eigen::MatrixXd rotation(3,3);
+	  double cos_psi = cos(-psi), sin_psi = sin(-psi);
+	  rotation <<
+	    cos_psi,-sin_psi, 0,
+	    sin_psi, cos_psi, 0,
+	          0,       0, 1;
+
+	  Eigen::MatrixXd translation(3,3);
+	  translation <<
+	    1,0,-px,
+	    0,1,-py,
+	    0,0,  1;
+
+	  Eigen::MatrixXd map_points_global(3,ptsx.size());
+	  for (unsigned ii=0; ii<ptsx.size(); ++ii)
+	    map_points_global.col(ii) << ptsx[ii], ptsy[ii], 1;
+
+	  Eigen::MatrixXd map_points_local = rotation * translation * map_points_global;
+
+	  for (unsigned ii=0; ii<ptsx.size(); ++ii) {
+	    next_x_vals.push_back(map_points_local(0,ii));
+	    next_y_vals.push_back(map_points_local(1,ii));
+	  }
+
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
