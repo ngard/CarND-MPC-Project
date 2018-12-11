@@ -14,6 +14,8 @@ using namespace std;
 // for convenience
 using json = nlohmann::json;
 
+extern size_t N;
+
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -71,7 +73,7 @@ int main() {
   uWS::Hub h;
 
   // MPC is initialized here!
-  MPC mpc;
+  MPC mpc(6);
 
   h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -100,31 +102,8 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
 
-          json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
-          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = throttle_value;
-
-          //Display the MPC predicted trajectory 
-          vector<double> mpc_x_vals;
-          vector<double> mpc_y_vals;
-
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Green line
-
-          msgJson["mpc_x"] = mpc_x_vals;
-          msgJson["mpc_y"] = mpc_y_vals;
-
-          //Display the waypoints/reference line
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
-
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Yellow line
+	  // converting points from global to local coordinate
 
 	  Eigen::MatrixXd rotation(3,3);
 	  double cos_psi = cos(-psi), sin_psi = sin(-psi);
@@ -145,13 +124,53 @@ int main() {
 
 	  Eigen::MatrixXd map_points_local = rotation * translation * map_points_global;
 
+	  vector<double> ptsx_local, ptsy_local;
+
 	  for (unsigned ii=0; ii<ptsx.size(); ++ii) {
-	    next_x_vals.push_back(map_points_local(0,ii));
-	    next_y_vals.push_back(map_points_local(1,ii));
+	    ptsx_local.push_back(map_points_local(0,ii));
+	    ptsy_local.push_back(map_points_local(1,ii));
 	  }
 
-          msgJson["next_x"] = next_x_vals;
-          msgJson["next_y"] = next_y_vals;
+	  auto coeffs_polyfit = polyfit(Eigen::VectorXd::Map(ptsx_local.data(),ptsx_local.size()),
+	   				Eigen::VectorXd::Map(ptsy_local.data(),ptsy_local.size()),
+	  				3);
+
+	  double cte = polyeval(coeffs_polyfit, 0);
+	  double epsi = - atan(coeffs_polyfit[1]);
+
+	  Eigen::VectorXd state(6);
+	  state << 0, 0, 0, v*0.44704, cte, epsi;
+
+	  auto vars = mpc.Solve(state, coeffs_polyfit);
+
+	  unsigned timestep_lookahead = 1;
+          double steer_value = vars[2+4*timestep_lookahead] / deg2rad(25);
+          double throttle_value = vars[3+4*timestep_lookahead];
+
+          json msgJson;
+          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
+          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
+          msgJson["steering_angle"] = steer_value;
+          msgJson["throttle"] = throttle_value;
+
+          //Display the MPC predicted trajectory
+          vector<double> mpc_x_vals;
+          vector<double> mpc_y_vals;
+
+	  for (unsigned n=0; n<N-1; ++n) {
+	    mpc_x_vals.push_back(vars[4*n]);
+	    mpc_y_vals.push_back(vars[4*n+1]);
+	  }
+
+          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
+          // the points in the simulator are connected by a Green line
+
+          msgJson["mpc_x"] = mpc_x_vals;
+          msgJson["mpc_y"] = mpc_y_vals;
+
+          //Display the waypoints/reference line
+          msgJson["next_x"] = ptsx_local;
+          msgJson["next_y"] = ptsy_local;
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
