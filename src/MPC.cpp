@@ -22,7 +22,7 @@ double dt = 0.1;
 const double Lf = 2.67;
 
 static size_t x_start, y_start, psi_start, v_start, cte_start, epsi_start, delta_start, a_start;
-static double ref_v = 20;
+static double ref_v = 50;
 
 class FG_eval {
  public:
@@ -44,8 +44,8 @@ class FG_eval {
     // The part of the cost based on the reference state.
     for (unsigned t = 0; t < N; t++) {
       fg[0] += CppAD::pow(vars[cte_start + t], 2);
-      fg[0] += 100*CppAD::pow(vars[epsi_start + t], 2);
-      fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
+      fg[0] += 1000*CppAD::pow(vars[epsi_start + t], 2);
+      fg[0] += 0.1*CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Minimize the use of actuators.
@@ -58,6 +58,11 @@ class FG_eval {
     for (unsigned t = 0; t < N - 2; t++) {
       fg[0] += 10000*CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
       fg[0] += 10*CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+    }
+
+    // Minimize the yaw rate
+    for (unsigned t = 0; t < N - 1; t++) {
+      fg[0] += 40000*CppAD::pow(vars[psi_start + t + 1] - vars[psi_start + t], 2);
     }
 
     fg[1 + x_start] = vars[x_start];
